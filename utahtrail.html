@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Utah Trail</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Georgia,'Times New Roman',serif;background:linear-gradient(180deg,#2b1c11,#5b3e27);min-height:100vh;padding:14px;color:#2b1c11}
+#app{max-width:880px;margin:0 auto;background:#f3e6cc;border:6px solid #5a3a1f;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden}
+header{background:#5a3a1f;color:#f3e6cc;text-align:center;padding:14px}
+header h1{font-size:2.1em;letter-spacing:2px}
+header p{font-style:italic;color:#e3cfa6;font-size:.95em}
+#hud{background:#e6d3ac;border-bottom:3px solid #5a3a1f;padding:10px 14px}
+#hud:empty{display:none}
+.hud-top{display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;font-size:.85em;font-weight:bold;color:#5a3a1f;margin-bottom:6px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:6px}
+.stat{background:#f8eed8;border:1px solid #b79b6a;border-radius:6px;padding:3px 5px;text-align:center;font-size:.78em}
+.stat b{display:block;font-size:1.25em}
+.party{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.member{flex:1;min-width:130px;background:#f8eed8;border:1px solid #b79b6a;border-radius:6px;padding:3px 7px;font-size:.78em}
+.member.dead{opacity:.55}
+.bar{height:6px;background:#cdb98f;border-radius:3px;overflow:hidden;margin-top:3px}
+.bar i{display:block;height:100%}
+.prog{margin-top:6px;height:12px;background:#cdb98f;border:1px solid #8c6b3e;border-radius:6px;overflow:hidden}
+.prog i{display:block;height:100%;background:linear-gradient(90deg,#4a7c3f,#7bb369)}
+main{padding:20px 22px;min-height:360px}
+main h2{color:#5a3a1f;margin-bottom:10px;font-size:1.5em;border-bottom:2px solid #c9ae7c;padding-bottom:6px}
+.text{line-height:1.65;font-size:1.04em;margin-bottom:16px}
+.text p{margin-bottom:10px}
+.choices{display:flex;flex-direction:column;gap:8px}
+.btn{background:#8c5a2b;color:#f8eed8;border:none;border-radius:6px;padding:11px 14px;font:inherit;font-size:1em;text-align:left;cursor:pointer;transition:.15s}
+.btn:hover:not(:disabled){background:#6b4423;transform:translateX(3px)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:#3f6f35}
+.btn.primary:hover:not(:disabled){background:#2f5628}
+.btn small{opacity:.85;font-size:.82em}
+.banner{background:#fbf1c7;border-left:5px solid #c9962b;padding:8px 12px;margin-bottom:14px;border-radius:4px;font-size:.93em}
+.banner p{margin:3px 0}
+.result{background:#e4efd9;border-left:5px solid #4a7c3f;padding:8px 12px;margin-bottom:12px;border-radius:4px}
+table.store{width:100%;border-collapse:collapse;margin-bottom:14px;font-size:.93em}
+table.store td{padding:6px 5px;border-bottom:1px solid #d8c498;vertical-align:middle}
+td.num{text-align:center;white-space:nowrap}
+.mini{width:32px;height:30px;font-size:1.2em;background:#8c5a2b;color:#fff;border:none;border-radius:4px;cursor:pointer}
+.mini:hover{background:#6b4423}
+#field{position:relative;height:250px;background:linear-gradient(180deg,#bfe0f5 0%,#bfe0f5 18%,#8fbf63 18%,#6aa34a 100%);border:3px solid #5a3a1f;border-radius:8px;overflow:hidden;cursor:crosshair;margin-bottom:14px}
+#hunthud{position:absolute;left:8px;top:6px;background:rgba(255,255,255,.85);padding:3px 8px;border-radius:5px;font-size:.85em;z-index:5;pointer-events:none}
+.animal{position:absolute;cursor:crosshair;user-select:none;line-height:1}
+footer{text-align:center;padding:10px;background:#e6d3ac;border-top:3px solid #5a3a1f;font-size:.85em}
+footer a{color:#5a3a1f;font-weight:bold}
+.big{font-size:3em;text-align:center}
+input#nameInput{width:100%;padding:10px;font:inherit;border:2px solid #b79b6a;border-radius:6px;margin:6px 0 14px}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>🐂 The Utah Trail</h1>
+    <p>Kirtland, Ohio to the Salt Lake Valley</p>
+  </header>
+  <div id="hud"></div>
+  <main id="main"></main>
+  <footer>The Utah Trail</footer>
+</div>
+
+<script>
+/* ================= HELPERS ================= */
+const $=id=>document.getElementById(id);
+const rnd=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
+const chance=p=>Math.random()<p;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+let G=null,BTNS=[],SHOP=null,HUNT=null;
+
+/* ================= DATA ================= */
+const ITEMS={
+  oxen:{label:'Oxen',icon:'🐂',unit:1,price:35,note:'Pull your wagon. You need at least 4 (6 is better).'},
+  food:{label:'Food (lbs)',icon:'🌽',unit:50,price:5,note:'Flour, cornmeal and bacon, sold in 50 lb lots.'},
+  clothing:{label:'Clothing (sets)',icon:'🧥',unit:1,price:12,note:'Warm clothes and blankets. One set per person.'},
+  ammo:{label:'Ammunition (rounds)',icon:'🔫',unit:20,price:3,note:'For hunting. Sold in boxes of 20.'},
+  medicine:{label:'Medicine (doses)',icon:'💊',unit:1,price:10,note:'Quinine, herbs and remedies.'},
+  parts:{label:'Wagon parts (sets)',icon:'🔧',unit:1,price:18,note:'A spare wheel, axle or tongue.'}
+};
+const VAL={food:.1,clothing:12,ammo:.15,medicine:10,parts:18,oxen:35,money:1};
+const TNAME={food:'lbs of food',clothing:'clothing set(s)',ammo:'rounds of ammunition',medicine:'dose(s) of medicine',parts:'wagon part set(s)',oxen:'ox/oxen',money:'dollars'};
+const PROFS={
+  farmer:{label:'Farmer',money:450,desc:'Strong with animals and crops. Hunts bring back more meat and gardens yield extra food.'},
+  carpenter:{label:'Carpenter',money:450,desc:'Mends wagons without spare parts and earns better wages.'},
+  blacksmith:{label:'Blacksmith',money:450,desc:'Fixes wagons and tools anywhere and earns good wages.'},
+  merchant:{label:'Merchant',money:750,desc:'Starts with the most money and gets better trades, but is not used to hard labor (weaker health).'}
+};
+const PACE={steady:{label:'Steady',miles:15,health:0},strenuous:{label:'Strenuous',miles:20,health:-.8},grueling:{label:'Grueling',miles:25,health:-1.8}};
+const RATION={filling:{label:'Filling (2 lb/person/day)',lb:2,health:1},meager:{label:'Meager (1.5 lb)',lb:1.5,health:0},bare:{label:'Bare bones (1 lb)',lb:1,health:-1.5}};
+const WEATHER={
+  clear:{label:'☀️ Clear',speed:1,health:0},rain:{label:'🌧️ Rain',speed:.75,health:-.5},snow:{label:'❄️ Snow',speed:.5,health:-1.5},
+  storm:{label:'⛈️ Storm',speed:.4,health:-1},hot:{label:'🔥 Hot',speed:.9,health:-1},cold:{label:'🥶 Bitter cold',speed:.7,health:-1.5},mud:{label:'🟤 Mud',speed:.5,health:-.3}
+};
+const WX=[
+  ['snow','snow','cold','cold','cold','clear','clear','mud'],['snow','snow','cold','cold','mud','clear','clear','clear'],
+  ['snow','mud','mud','rain','rain','clear','clear','cold'],['mud','mud','rain','rain','storm','clear','clear','clear'],
+  ['rain','rain','storm','mud','clear','clear','clear','clear'],['rain','storm','hot','clear','clear','clear','clear','clear'],
+  ['hot','hot','storm','rain','clear','clear','clear','clear'],['hot','hot','storm','clear','clear','clear','clear','clear'],
+  ['rain','storm','clear','clear','clear','clear','cold','clear'],['rain','cold','cold','clear','clear','clear','snow','clear'],
+  ['snow','cold','cold','cold','rain','clear','clear','mud'],['snow','snow','cold','cold','cold','clear','clear','clear']
+];
+const DIS={
+  east:['dysentery','measles','fever','pneumonia'],
+  iowa:['ague (malaria)','dysentery','typhoid fever','chills and fever'],
+  plains:['dysentery','typhoid fever','mountain fever','scurvy']
+};
+const TRADERS={
+  1:['a farmer','a country storekeeper','a fellow traveler','a canal-boat man'],
+  2:['a sympathetic farmer','a fellow exile','a peddler','a neighbor'],
+  4:['a fellow Saint','an Iowa settler','a peddler','a Potawatomi trader'],
+  6:['a fur trapper','a Pawnee trader','a Lakota trader','a Shoshone trader','a fellow pioneer','a mountain man']
+};
+const CHAPS={1:'Chapter 1 · Kirtland to Far West',2:'Chapter 2 · The Exodus from Missouri',3:'Chapter 3 · Nauvoo the Beautiful',4:'Chapter 4 · Across Iowa',5:'Chapter 5 · Winter Quarters',6:'Chapter 6 · The Trail to the Valley'};
+const REGION={1:'east',2:'east',3:'east',4:'iowa',5:'iowa',6:'plains'};
+
+/* ================= ROUTES ================= */
+const note=(t,x)=>n=>outcome(t,x,n);
+const ROUTES={
+1:[
+ {name:'Kirtland, Ohio',miles:0,store:1.0},
+ {name:'Ohio Countryside',miles:130,store:1.15,scene:note('📍 Ohio Countryside','<p>You pass through small Ohio towns. Some neighbors jeer at the passing Mormon wagons; others quietly hand you bread. A country store offers supplies at a premium.</p>')},
+ {name:'Wabash River, Indiana',miles:310,scene:n=>riverScene('Wabash River',{depth:3,width:300,risk:.3,ferry:15},n)},
+ {name:'Illinois Prairie',miles:500,store:1.25,scene:note('📍 Illinois Prairie','<p>A sea of tall prairie grass stretches to the horizon. Saints heading west tell you tensions are rising in Missouri and that neighbors are arming themselves.</p>')},
+ {name:'Mississippi River',miles:660,scene:n=>riverScene('Mississippi River',{depth:6,width:900,risk:.4,ferry:30},n)},
+ {name:'Missouri Prairie',miles:770,store:1.3,scene:note('📍 Missouri Prairie','<p>You cross into Missouri. Strangers eye your wagon with suspicion. Ever since the Saints began gathering here, local feeling has turned hostile. A trader sells supplies at steep prices.</p>')},
+ {name:'Far West, Missouri',miles:860,end:true}
+],
+2:[
+ {name:'Far West, Missouri',miles:0,store:1.4},
+ {name:'Winter Road East',miles:70,scene:note('📍 Winter Road','<p>The road east is frozen and rutted. Long lines of exiles, with wagons, carts and people on foot, stretch ahead and behind. Families share what little they have.</p>')},
+ {name:'Salt River Crossing',miles:140,scene:n=>riverScene('Salt River',{depth:2,width:60,risk:.2,ferry:8},n)},
+ {name:'Quincy, Illinois',miles:200,end:true}
+],
+4:[
+ {name:'Nauvoo, Illinois',miles:0,store:1.0},
+ {name:'Sugar Creek, Iowa',miles:9,scene:n=>sceneSugarCreek(n)},
+ {name:'Chariton River',miles:60,scene:n=>riverScene('Chariton River',{depth:3,width:100,risk:.25,ferry:10},n)},
+ {name:'Garden Grove',miles:145,scene:n=>sceneGardenGrove(n)},
+ {name:'Mount Pisgah',miles:190,scene:n=>sceneMtPisgah(n)},
+ {name:'Council Bluffs',miles:265,scene:n=>sceneBattalion(n)},
+ {name:'Winter Quarters',miles:282,end:true}
+],
+6:[
+ {name:'Winter Quarters, Nebraska',miles:0,store:1.3},
+ {name:'Elkhorn River',miles:25,scene:n=>riverScene('Elkhorn River',{depth:3,width:80,risk:.25,ferry:10},n)},
+ {name:'Loup Fork of the Platte',miles:125,scene:n=>scenePawnee(()=>riverScene('Loup Fork',{depth:2,width:400,risk:.3,ferry:12},n))},
+ {name:'Platte Valley Buffalo Country',miles:260,scene:n=>sceneBuffalo(n)},
+ {name:'Chimney Rock',miles:430,scene:n=>{G.faith=clamp(G.faith+2,0,100);outcome('🗿 Chimney Rock','<p>The spire of Chimney Rock rises from the plain, the first sign of the mountains ahead. The sight lifts everyone\'s spirits. <b>(+2 Faith)</b></p>',n);}},
+ {name:'Fort Laramie',miles:520,store:1.8,scene:note('🏰 Fort Laramie','<p>Fort Laramie is a busy trading post where the roads of emigrants to Oregon, California and Utah meet. You can resupply here, but prices are high.</p>')},
+ {name:'North Platte Crossing',miles:640,scene:n=>riverScene('North Platte River (Mormon Ferry)',{depth:5,width:250,risk:.45,ferry:20},n)},
+ {name:'Independence Rock',miles:700,scene:n=>sceneIndependence(n)},
+ {name:'South Pass',miles:790,scene:n=>{G.faith=clamp(G.faith+2,0,100);outcome('⛰️ South Pass','<p>You cross the Continental Divide at South Pass. The ground is gentle, but the wind is cold even in summer. You are well past the halfway point. <b>(+2 Faith)</b></p>',n);}},
+ {name:'Little Sandy River',miles:830,scene:n=>sceneBridger(n)},
+ {name:'Green River Crossing',miles:850,scene:n=>riverScene('Green River',{depth:5,width:200,risk:.4,ferry:18},n)},
+ {name:'Fort Bridger',miles:915,store:2.0,scene:note('🏰 Fort Bridger','<p>Jim Bridger\'s trading post is a stop for emigrants bound for Oregon and California. Beyond it, your company will follow the trail left by the Donner-Reed party into the mountains. Supplies here are very expensive.</p>')},
+ {name:'Echo Canyon',miles:975,scene:n=>sceneEcho(n)},
+ {name:'Emigration Canyon',miles:1010,scene:n=>sceneEmigration(n)},
+ {name:'Salt Lake Valley',miles:1030,end:true}
+]};
+const CH_END={1:()=>missouriSequence(),2:()=>sceneQuincy(),4:()=>sceneWQ(),6:()=>win()};
+const CH_INTRO={
+1:`<p>Your wagon rolls out of Kirtland, past the temple on the hill, and onto the road west. It is roughly <b>860 miles</b> to Far West, Missouri, through Ohio, Indiana, Illinois and Missouri.</p><p>Each day your family eats, tires and risks illness. Use <b>Pace</b> and <b>Rations</b> to balance speed against health, <b>Hunt</b> and <b>Trade</b> to stretch supplies, and rest and worship to keep your <b>Faith</b> strong. If your faith reaches zero, or you die, your journey ends.</p>`,
+2:`<p>The Saints have been driven out of Missouri. Under Brigham Young's direction, thousands of exiles are crossing the state to Quincy, Illinois, about <b>200 miles</b> away. The cold is bitter, supplies are thin, and every family leans on its neighbors.</p>`,
+4:`<p>Behind you, the Nauvoo Temple fades into the distance. Ahead lie nearly <b>280 miles</b> of Iowa prairie, swollen rivers and mud, all the way to the Missouri River.</p>`,
+6:`<p>Ahead is the great trek: roughly <b>1,030 miles</b> from Winter Quarters to the valley of the Great Salt Lake, across Nebraska's plains, Wyoming's high desert and the Wasatch Mountains. Prepare your heart and your wagon.</p>`
+};
+
+/* ================= CORE UI ================= */
+function screen(title,body,buttons){
+  BTNS=buttons||[];
+  let h='';
+  if(G&&G.banner){h+=`<div class="banner">${G.banner}</div>`;G.banner='';}
+  if(title)h+=`<h2>${title}</h2>`;
+  h+=`<div class="text">${body}</div>`;
+  if(BTNS.length)h+='<div class="choices">'+BTNS.map((b,i)=>`<button class="btn ${b.cls||''}" ${b.disabled?'disabled':''} onclick="clickBtn(${i})">${b.label}</button>`).join('')+'</div>';
+  $('main').innerHTML=h;
+  renderHUD();
+  window.scrollTo({top:0});
+}
+function clickBtn(i){const b=BTNS[i];if(b&&!b.disabled)b.fn();}
+function outcome(title,body,next){
+  if(checkEnd())return;
+  screen(title,body,[{label:'Continue',cls:'primary',fn:next||travelMenu}]);
+}
+const dateStr=()=>`${MONTHS[G.date.getMonth()]} ${G.date.getDate()}, ${G.date.getFullYear()}`;
+function renderHUD(){
+  const h=$('hud');
+  if(!G){h.innerHTML='';return;}
+  const s=G.supplies;
+  const st=(i,l,v)=>`<div class="stat">${i} ${l}<b>${v}</b></div>`;
+  const mem=G.party.map(m=>{
+    const col=!m.alive?'#777':m.health>60?'#4a7c3f':m.health>30?'#d19a1f':'#b03a2e';
+    const status=!m.alive?'✝ Deceased':m.ill?'🤒 '+m.ill:m.health<50?'Weak':'Good';
+    return `<div class="member ${m.alive?'':'dead'}"><b>${m.name}</b> (${m.role})<br>${status}<div class="bar"><i style="width:${m.alive?Math.round(m.health):0}%;background:${col}"></i></div></div>`;
+  }).join('');
+  let prog='';
+  if(G.atRoute&&G.route){const end=G.route[G.route.length-1].miles;prog=`<div class="prog"><i style="width:${clamp(G.progress/end*100,0,100)}%"></i></div>`;}
+  h.innerHTML=`<div class="hud-top"><span>${CHAPS[G.chapter]}</span><span>📅 ${dateStr()}</span><span>🧭 ${G.totalMiles} mi traveled</span></div>
+  <div class="stats">${st('💰','Money','$'+G.money)}${st('🌽','Food',s.food+' lb')}${st('🐂','Oxen',s.oxen)}${st('🧥','Clothing',s.clothing)}${st('🔫','Ammo',s.ammo)}${st('💊','Medicine',s.medicine)}${st('🔧','Parts',s.parts)}${st('🙏','Faith',Math.round(G.faith))}</div>
+  <div class="party">${mem}</div>${prog}`;
+}
+
+/* ================= STATE ================= */
+const mk=(name,role)=>({name,role,health:100,alive:true,ill:null});
+function newGame(name,prof){
+  G={name,prof,money:PROFS[prof].money,
+    perk:{repair:prof==='carpenter'||prof==='blacksmith',wage:prof==='carpenter'||prof==='blacksmith',farm:prof==='farmer',trade:prof==='merchant'},
+    supplies:{oxen:0,food:0,clothing:0,ammo:0,medicine:0,parts:0},
+    party:[mk(name,'You'),mk('Hannah','Wife'),mk('Thomas','Son'),mk('Eliza','Daughter')],
+    faith:70,pace:'steady',ration:'filling',date:new Date(1838,0,1),chapter:1,route:null,nextIdx:1,progress:0,totalMiles:0,days:0,
+    tradesLeft:3,flags:{},weather:'clear',atLandmark:null,atRoute:false,banner:'',region:'east',over:false,helpTries:0};
+  if(prof==='merchant')G.party.forEach(m=>m.health=85);
+}
+const setDate=(y,m,d)=>{G.date=new Date(y,m,d);};
+const before=(y,m,d)=>G.date<new Date(y,m,d);
+const aliveM=()=>G.party.filter(m=>m.alive);
+function hurt(m,amt,cause,out){if(!m||!m.alive)return;m.health=clamp(m.health-amt,0,100);if(m.health<=0)die(m,cause||m.ill||'their injuries',out);}
+function die(m,cause,out){
+  m.alive=false;m.ill=null;G.faith=clamp(G.faith-8,0,100);
+  const t=m.role==='You'?`💀 You have died of ${cause==='their injuries'?'your injuries':cause}.`:`💀 ${m.name} (${m.role.toLowerCase()}) has died of ${cause}. Your family buries them beside the trail and marks the grave. (−8 Faith)`;
+  if(out)out.push(t);else G.banner+=`<p>${t}</p>`;
+}
+function checkEnd(){
+  if(!G)return false;
+  if(G.over)return true;
+  if(!G.party[0].alive)return gameOver(`The trail has claimed ${G.name}. With the head of the household gone, your family can go no farther, and your journey ends here.`);
+  if(G.faith<=0)return gameOver(`Worn down by grief and hardship, your faith has faded away. You leave the company of the Saints, and your family's story takes a different road.`);
+  return false;
+}
+function gameOver(text){
+  G.over=true;
+  screen('⚰️ Your Journey Has Ended',`<p>${text}</p><p>📅 ${dateStr()} · 🧭 ${G.totalMiles} miles traveled · ⛺ ${G.days} days on the trail.</p><p><small>Tip: balance your pace and rations, keep medicine and spare parts handy, and look after your faith.</small></p>`,[{label:'Try Again',cls:'primary',fn:titleScreen}]);
+  return true;
+}
+
+/* ================= DAILY SIMULATION ================= */
+function dayTick(o){
+  o=o||{};
+  const lines=[];
+  G.date.setDate(G.date.getDate()+1);G.days++;
+  G.weather=pick(WX[G.date.getMonth()]);
+  const alive=aliveM(),n=alive.length;
+  let miles=0;
+  if(o.move){
+    let sp=PACE[G.pace].miles*clamp(G.supplies.oxen/6,.2,1)*WEATHER[G.weather].speed;
+    if(G.flags.camp&&G.chapter===1)sp*=.9;
+    miles=Math.max(3,Math.round(sp*(.85+Math.random()*.3)));
+  }
+  const need=Math.ceil(RATION[G.ration].lb*n);
+  let starving=false;
+  if(G.supplies.food>=need)G.supplies.food-=need;
+  else{G.supplies.food=0;starving=true;lines.push('⚠️ You have run out of food and your family is starving!');}
+  const clothesOk=G.supplies.clothing>=n;
+  alive.forEach(m=>{
+    let d=RATION[G.ration].health+(o.move?PACE[G.pace].health:0)+(o.rest?2:0);
+    if(starving)d-=4;
+    const wh=WEATHER[G.weather].health;
+    if(wh<0)d+=clothesOk?wh*.4:wh*1.4;
+    if(m.ill){
+      d-=o.rest?1.5:3;
+      if(chance(o.rest?.18:.07)){lines.push(`💚 ${m.name} has recovered from ${m.ill}.`);m.ill=null;}
+    }else if(chance(.009*(m.health<50?2.5:1)*(G.ration==='bare'?1.6:1))){
+      m.ill=pick(DIS[G.region]||DIS.east);lines.push(`🤒 ${m.name} has come down with ${m.ill}.`);
+    }
+    m.health=clamp(m.health+d,0,100);
+    if(m.health<=0)die(m,m.ill||(starving?'starvation':'exhaustion'),lines);
+  });
+  if((G.weather==='hot'||G.weather==='rain'||G.weather==='storm')&&G.supplies.food>50&&chance(.025)){
+    const l=Math.round(G.supplies.food*rnd(3,8)/100);G.supplies.food-=l;lines.push(`🦟 Heat and damp spoil some of your provisions (−${l} lbs food).`);
+  }
+  G.faith=clamp(G.faith-.2,0,100);
+  return{miles,lines};
+}
+function loseDays(n,rest){
+  const s=new Set();
+  for(let i=0;i<n;i++)dayTick({rest:!!rest}).lines.forEach(l=>s.add(l));
+  s.forEach(l=>G.banner+=`<p>${l}</p>`);
+}
+
+/* ================= TRAIL MENU ================= */
+function startChapter(n){
+  G.chapter=n;G.route=ROUTES[n];G.nextIdx=1;G.progress=0;G.atLandmark=G.route[0];G.atRoute=true;G.region=REGION[n];
+  G.tradesLeft=(G.flags.camp&&n===1)?4:3;
+  let t=CH_INTRO[n];
+  if(n===1&&G.flags.camp)t+=`<p>🏕️ You travel with the <b>Kirtland Camp</b>, about 500 Saints in an organized company. You share news and supplies, but the camp moves a little slower.</p>`;
+  screen(CHAPS[n],t,[{label:'🛤️ Hit the trail',cls:'primary',fn:travelMenu}]);
+}
+function travelMenu(){
+  if(checkEnd())return;
+  const next=G.route[G.nextIdx],left=next.miles-G.progress,here=G.atLandmark;
+  const ill=aliveM().filter(m=>m.ill);
+  const body=`<p>${here?'📍 You are at <b>'+here.name+'</b>.':'🛤️ You are on the trail.'}</p><p>Next stop: <b>${next.name}</b>, ${left} miles ahead.</p><p>Weather: ${WEATHER[G.weather].label} · Pace: ${PACE[G.pace].label} · Rations: ${RATION[G.ration].label}</p>`;
+  const b=[
+    {label:'🛤️ Continue on the trail',cls:'primary',fn:travel},
+    {label:'🛌 Rest and worship (2 days)',fn:()=>rest(2)},
+    {label:'🏹 Hunt',fn:()=>huntScreen()},
+    {label:`🤝 Trade with others (${G.tradesLeft} left)`,disabled:G.tradesLeft<=0,fn:tradeMenu},
+    {label:'⚙️ Change pace',fn:paceMenu},
+    {label:'🍞 Change rations',fn:rationMenu}
+  ];
+  if(ill.length)b.splice(2,0,{label:'💊 Care for the sick',fn:careMenu});
+  if(here&&here.store)b.splice(1,0,{label:`🏪 Visit the store at ${here.name}`,fn:()=>openStore(here.name,here.store,travelMenu)});
+  screen('⛺ Camp',body,b);
+}
+function travel(){
+  if(G.supplies.oxen<=0)return noOxen();
+  G.atLandmark=null;
+  const target=G.route[G.nextIdx];
+  let days=0,miles=0,stop=null;const notes=new Set();
+  while(days<7){
+    const r=dayTick({move:true});days++;
+    const step=Math.min(r.miles,target.miles-G.progress);
+    G.progress+=step;G.totalMiles+=step;miles+=step;
+    r.lines.forEach(l=>notes.add(l));
+    if(!G.party[0].alive)break;
+    if(G.progress>=target.miles){stop='landmark';break;}
+    if(chance(.11*(G.flags.vanguard?1.3:1))){stop='event';break;}
+  }
+  let html=`<p>You traveled <b>${miles}</b> mile${miles===1?'':'s'} over ${days} day${days===1?'':'s'}.</p>`;
+  notes.forEach(l=>html+=`<p>${l}</p>`);
+  G.banner+=html;
+  if(checkEnd())return;
+  if(stop==='landmark')return arrive(target);
+  if(stop==='event')return randomEvent(travelMenu);
+  travelMenu();
+}
+function arrive(lm){
+  G.atLandmark=lm;G.nextIdx++;
+  G.tradesLeft=(G.flags.camp&&G.chapter===1)?4:3;
+  if(lm.end){G.atRoute=false;return CH_END[G.chapter]();}
+  if(lm.scene)return lm.scene(travelMenu);
+  outcome(`📍 ${lm.name}`,`You have reached ${lm.name}.`,travelMenu);
+}
+function rest(d){
+  loseDays(d,true);
+  G.faith=clamp(G.faith+3,0,100);
+  G.banner+=`<p>🛌 You rest for ${d} days, hold a devotional and tend to the family. (+3 Faith)</p>`;
+  if(checkEnd())return;
+  travelMenu();
+}
+function paceMenu(){
+  screen('⚙️ Pace','<p>A faster pace covers more ground but wears everyone down.</p>',
+    Object.keys(PACE).map(k=>({label:`${PACE[k].label} (${PACE[k].miles} miles/day at best)${G.pace===k?' ✔':''}`,fn:()=>{G.pace=k;travelMenu();}})));
+}
+function rationMenu(){
+  screen('🍞 Rations','<p>Bigger meals keep your family healthy but empty the barrel faster.</p>',
+    Object.keys(RATION).map(k=>({label:`${RATION[k].label}${G.ration===k?' ✔':''}`,fn:()=>{G.ration=k;travelMenu();}})));
+}
+function noOxen(){
+  const here=G.atLandmark;
+  const b=[{label:`🤝 Trade with others (${G.tradesLeft} left)`,disabled:G.tradesLeft<=0,fn:tradeMenu}];
+  if(here&&here.store)b.push({label:'🏪 Visit the store',fn:()=>openStore(here.name,here.store,travelMenu)});
+  b.push({label:'🙏 Ask nearby Saints to lend you a yoke of oxen',fn:()=>{
+    G.helpTries++;
+    if(chance(.6)){G.supplies.oxen+=2;G.faith=clamp(G.faith-2,0,100);outcome('A Neighbor\'s Kindness','A neighboring family lends you two oxen. You promise to repay them. (−2 Faith)',travelMenu);}
+    else if(G.helpTries>=3)gameOver('No one can spare an ox. Your stranded wagon is left behind, and your family is taken in by another company. Your trek ends here.');
+    else{loseDays(2,true);outcome('No Help Yet','No one can spare animals right now. You wait two days.',travelMenu);}
+  }});
+  screen('🐂 No Oxen!','<p>Your oxen are gone and the wagon cannot move. You must buy, trade for or borrow some.</p>',b);
+}
+
+/* ================= CARE ================= */
+function careMenu(){
+  const ill=aliveM().filter(m=>m.ill);
+  if(!ill.length)return travelMenu();
+  screen('💊 Care for the Sick',`<p>Who would you like to help? Medicine on hand: <b>${G.supplies.medicine}</b></p>`,
+    ill.map(m=>({label:`${m.name}: ${m.ill} (health ${Math.round(m.health)})`,fn:()=>treatMenu(m)})).concat([{label:'Back',fn:travelMenu}]));
+}
+function treatMenu(m){
+  screen(`Treating ${m.name}`,`<p>${m.name} is suffering from <b>${m.ill}</b>.</p>`,[
+    {label:'💊 Give medicine (1 dose)',disabled:G.supplies.medicine<1,fn:()=>{
+      G.supplies.medicine--;
+      if(chance(.8)){m.ill=null;m.health=clamp(m.health+10,0,100);outcome('Medicine Works',`${m.name}'s fever breaks and they begin to recover.`,careMenu);}
+      else outcome('No Improvement',`The medicine does little. ${m.name} remains ill.`,careMenu);}},
+    {label:'🙏 Ask the elders for a priesthood blessing',fn:()=>{
+      const p=clamp(.4+G.faith/250,.4,.8);G.faith=clamp(G.faith+2,0,100);
+      if(chance(p)){m.ill=null;outcome('A Blessing of Healing',`After the blessing, ${m.name} begins to mend. You give thanks. (+2 Faith)`,careMenu);}
+      else outcome('Peace in Hardship',`${m.name} feels comforted, though the illness lingers. You trust in the Lord's will. (+2 Faith)`,careMenu);}},
+    {label:'Back',fn:careMenu}
+  ]);
+}
+
+/* ================= STORE ================= */
+function openStore(name,mult,next){
+  SHOP={name,mult,next,bought:{oxen:0,food:0,clothing:0,ammo:0,medicine:0,parts:0}};
+  renderStore();
+}
+function renderStore(msg){
+  const rows=Object.keys(ITEMS).map(k=>{
+    const it=ITEMS[k],pr=Math.round(it.price*SHOP.mult);
+    return `<tr><td>${it.icon} <b>${it.label}</b><br><small>${it.note}</small></td><td class="num">$${pr}${it.unit>1?'<br><small>per '+it.unit+'</small>':''}</td><td class="num">You have<br><b>${G.supplies[k]}</b></td><td class="num"><button class="mini" onclick="shopBuy('${k}',-1)">−</button> <button class="mini" onclick="shopBuy('${k}',1)">+</button></td></tr>`;
+  }).join('');
+  screen('🏪 '+SHOP.name,`${msg?`<div class="banner">${msg}</div>`:''}<p>Your money: <b>$${G.money}</b>${SHOP.mult>1.2?' <small>(prices are high out here!)</small>':''}</p><table class="store">${rows}</table>`,[{label:'Leave the store',cls:'primary',fn:SHOP.next}]);
+}
+function shopBuy(k,dir){
+  const it=ITEMS[k],pr=Math.round(it.price*SHOP.mult);
+  if(dir>0){
+    if(G.money<pr)return renderStore("You can't afford that.");
+    G.money-=pr;G.supplies[k]+=it.unit;SHOP.bought[k]++;
+  }else{
+    if(SHOP.bought[k]<=0)return renderStore('You can only return items you bought during this visit.');
+    G.money+=pr;G.supplies[k]-=it.unit;SHOP.bought[k]--;
+  }
+  renderStore();
+}
+function readyCheck(name,mult,go){
+  const s=G.supplies,n=aliveM().length,w=[];
+  if(s.oxen<4)w.push(`You have only ${s.oxen} oxen. You need at least 4 to move well (6 is better).`);
+  if(s.food<n*2*40)w.push(`You have only ${s.food} lbs of food, about ${Math.floor(s.food/(n*2))} days of full rations.`);
+  if(s.clothing<n)w.push('You have fewer clothing sets than people in your family.');
+  if(s.ammo<20)w.push('You have very little ammunition for hunting.');
+  if(s.parts<1)w.push('You have no spare wagon parts.');
+  screen('Ready to Depart?',w.length?'<p>Before you leave, consider:</p>'+w.map(x=>`<p>⚠️ ${x}</p>`).join(''):'<p>Your wagon is loaded and your family is ready.</p>',[
+    {label:'🚩 Depart now',cls:'primary',fn:go},
+    {label:'Return to the store',fn:()=>openStore(name,mult,()=>readyCheck(name,mult,go))}
+  ]);
+}
+function chooseDeparture(cfg){
+  screen(cfg.title,cfg.intro,cfg.options.map(o=>({label:`${o.label}<br><small>${o.sub}</small>`,fn:()=>{
+    setDate(o.date[0],o.date[1],o.date[2]);
+    if(o.apply)o.apply();
+    openStore(cfg.store.name,cfg.store.mult,()=>readyCheck(cfg.store.name,cfg.store.mult,cfg.go));
+  }})));
+}
+
+/* ================= HUNTING ================= */
+function huntScreen(opts){
+  opts=opts||{};
+  if(G.supplies.ammo<=0){G.banner+='<p>You have no ammunition. Buy some at a store or trade for it.</p>';return travelMenu();}
+  screen('🏹 Hunting','<p>Click animals to shoot. Each shot uses 1 round, and missing still costs a round. You have <b>25 seconds</b> and can carry back at most 100 lbs of meat.</p><div id="field"><div id="hunthud"></div></div>',[{label:'Return to camp now',fn:endHunt}]);
+  HUNT={meat:0,t:0,animals:[],msg:''};
+  const f=$('field');
+  f.onclick=e=>{if(e.target===f||e.target.id==='hunthud')shoot(null);};
+  HUNT.iv=setInterval(()=>huntTick(opts),100);
+  huntHud();
+}
+function huntTick(opts){
+  const h=HUNT;if(!h)return;
+  const f=$('field');
+  if(!f){clearInterval(h.iv);HUNT=null;return;}
+  h.t+=.1;
+  if(Math.random()<.07)spawnAnimal(opts);
+  h.animals.forEach(a=>{a.x+=a.dir*a.sp;a.el.style.left=a.x+'px';});
+  h.animals=h.animals.filter(a=>{const out=a.x<-90||a.x>f.clientWidth+90;if(out)a.el.remove();return!out;});
+  huntHud();
+  if(h.t>=25)endHunt();
+}
+function spawnAnimal(opts){
+  const f=$('field'),h=HUNT;
+  const kinds=[{e:'🐇',meat:4,sp:6,size:26,w:5},{e:'🦌',meat:35,sp:4,size:38,w:3},{e:'🦬',meat:110,sp:2.5,size:46,w:opts.bison?5:1}];
+  const tot=kinds.reduce((a,k)=>a+k.w,0);let r=Math.random()*tot,k=kinds[0];
+  for(const x of kinds){r-=x.w;if(r<=0){k=x;break;}}
+  const dir=chance(.5)?1:-1;
+  const el=document.createElement('div');el.className='animal';el.textContent=k.e;el.style.fontSize=k.size+'px';el.style.top=rnd(30,190)+'px';
+  const a={el,x:dir>0?-60:f.clientWidth+20,dir,sp:k.sp,meat:k.meat};
+  el.style.left=a.x+'px';
+  el.onclick=ev=>{ev.stopPropagation();shoot(a);};
+  f.appendChild(el);h.animals.push(a);
+}
+function shoot(a){
+  const h=HUNT;if(!h)return;
+  if(G.supplies.ammo<=0){endHunt();return;}
+  G.supplies.ammo--;renderHUD();
+  if(a&&chance(.85)){const m=Math.round(a.meat*(G.perk.farm?1.3:1));h.meat+=m;h.msg=`🎯 Hit! +${m} lbs`;a.el.remove();h.animals=h.animals.filter(x=>x!==a);}
+  else h.msg=a?'💨 Missed!':'💨 Wasted a shot.';
+  huntHud();
+  if(G.supplies.ammo<=0)endHunt();
+}
+function huntHud(){const e=$('hunthud');if(e&&HUNT)e.innerHTML=`Ammo: ${G.supplies.ammo} · Meat: ${HUNT.meat} lbs · Time: ${Math.max(0,Math.ceil(25-HUNT.t))}s<br>${HUNT.msg}`;}
+function endHunt(){
+  const h=HUNT;if(!h)return;
+  clearInterval(h.iv);HUNT=null;
+  const got=Math.min(100,h.meat);
+  G.supplies.food+=got;
+  const r=dayTick({});
+  G.banner+=`<p>🏹 You spend the day hunting and bring back <b>${got} lbs</b> of meat${h.meat>100?' (all you can carry)':''}.</p>`;
+  r.lines.forEach(l=>G.banner+=`<p>${l}</p>`);
+  if(checkEnd())return;
+  travelMenu();
+}
+
+/* ================= TRADING ================= */
+function spend(k,n){if(k==='money')G.money+=n;else G.supplies[k]+=n;}
+function tradeMenu(){
+  if(G.tradesLeft<=0)return travelMenu();
+  const have=k=>k==='money'?G.money:G.supplies[k];
+  const GA={food:()=>rnd(2,6)*25,clothing:()=>rnd(1,2),ammo:()=>rnd(1,3)*20,medicine:()=>1,parts:()=>1,oxen:()=>1,money:()=>rnd(2,8)*5};
+  const keys=Object.keys(VAL);let offer=null;
+  for(let t=0;t<40&&!offer;t++){
+    const g=pick(keys),r=pick(keys);if(g===r)continue;
+    const ga=GA[g]();if(have(g)<ga)continue;
+    let ra=ga*VAL[g]*(.8+Math.random()*.5)*(G.perk.trade?1.2:1)/VAL[r];
+    ra=r==='food'?Math.round(ra/5)*5:Math.round(ra);
+    if(ra<1)continue;
+    offer={g,ga,r,ra};
+  }
+  G.tradesLeft--;
+  if(!offer){G.banner+='<p>Nobody has anything you can trade for right now.</p>';return travelMenu();}
+  const who=pick(TRADERS[G.chapter]||TRADERS[1]);
+  const fmt=(k,n)=>k==='money'?`$${n}`:`${n} ${TNAME[k]}`;
+  screen('🤝 A Trading Offer',`<p>${who[0].toUpperCase()+who.slice(1)} offers you <b>${fmt(offer.r,offer.ra)}</b> in exchange for your <b>${fmt(offer.g,offer.ga)}</b>.</p>`,[
+    {label:'Accept the trade',cls:'primary',fn:()=>{spend(offer.g,-offer.ga);spend(offer.r,offer.ra);G.banner+='<p>✅ Trade completed.</p>';travelMenu();}},
+    {label:'Decline',fn:travelMenu}
+  ]);
+}
+
+/* ================= RIVERS ================= */
+function riverScene(name,c,next){
+  const rain=G.weather==='rain'||G.weather==='storm';
+  const base=clamp(c.risk+(rain?.1:0),.05,.8);
+  const fl=clamp(c.depth>3?base*.7:base*1.3,.05,.85);
+  const fee=Math.max(50,Math.round(c.ferry*3));
+  screen(`🌊 ${name}`,`<p>You arrive at the <b>${name}</b>, roughly ${c.depth} feet deep and ${c.width} yards wide.${rain?' Recent rain has the current running swift.':''}</p>`,[
+    {label:`Ford the river (about ${Math.round(base*100)}% risk)`,fn:()=>attempt(name,base,next)},
+    {label:`Caulk the wagon and float it across (about ${Math.round(fl*100)}% risk)`,fn:()=>attempt(name,fl,next)},
+    {label:`Take the ferry ($${fee})`,disabled:G.money<fee,fn:()=>{G.money-=fee;attempt(name,.03,next);}},
+    {label:'Wait a day for the water to drop',fn:()=>{loseDays(1,true);if(checkEnd())return;riverScene(name,Object.assign({},c,{risk:Math.max(.05,c.risk-(chance(.6)?.1:0))}),next);}}
+  ]);
+}
+function attempt(name,risk,next){
+  if(!chance(risk))return outcome('Safe Crossing',`You and your wagon cross the ${name} safely.`,next);
+  const roll=Math.random();let t;
+  if(roll<.45){const lost=Math.round(G.supplies.food*rnd(10,30)/100);G.supplies.food-=lost;t=`The current batters the wagon and soaks your provisions. You lose ${lost} lbs of food.`;}
+  else if(roll<.7&&G.supplies.oxen>1){G.supplies.oxen--;t='An ox loses its footing and is swept away downstream.';}
+  else if(roll<.9){const c=Math.min(G.supplies.clothing,rnd(1,2));G.supplies.clothing-=c;aliveM().forEach(m=>hurt(m,8));t=`Water pours into the wagon. You lose ${c} set(s) of clothing and everyone is chilled and shaken.`;}
+  else{
+    const v=aliveM().filter(m=>m.role!=='You');
+    if(v.length){const m=pick(v);die(m,'drowning');t=`The wagon lurches and ${m.name} is swept into the river. Despite your efforts, ${m.name} is lost.`;}
+    else{G.supplies.food=Math.round(G.supplies.food*.7);t='A wave floods the wagon, ruining much of your food.';}
+  }
+  outcome('Rough Crossing',t,next);
+}
+
+/* ================= RANDOM EVENTS ================= */
+const mo=()=>G.date.getMonth();
+const EVENTS=[
+ {w:10,run(next){
+   const part=pick(['wheel','axle','wagon tongue']);
+   if(G.supplies.parts>0){G.supplies.parts--;loseDays(1);return outcome('🔧 Wagon Trouble',`A ${part} on your wagon cracks. You swap in a spare part and lose a day.`,next);}
+   if(G.perk.repair){loseDays(1);return outcome('🔧 Wagon Trouble',`The ${part} breaks, but your skills as a ${G.prof} let you mend it by hand. You lose a day.`,next);}
+   loseDays(4);G.faith=clamp(G.faith-2,0,100);
+   outcome('🔧 Wagon Trouble',`The ${part} breaks and you have no spare! It takes four long days to patch it together. (−2 Faith)`,next);
+ }},
+ {w:()=>G.flags.lateGrass?9:5,when:()=>G.supplies.oxen>0,run(next){G.supplies.oxen--;outcome('🐂 Ox Lost',`One of your oxen collapses from exhaustion and dies. ${G.supplies.oxen} remain.`,next);}},
+ {w:9,when:()=>G.party.some(m=>m.alive&&!m.ill),run(next){
+   const m=pick(G.party.filter(x=>x.alive&&!x.ill));m.ill=pick(DIS[G.region]||DIS.east);hurt(m,8);
+   outcome('🤒 Illness in Camp',`${m.name} has come down with ${m.ill}. Use <b>Care for the sick</b> in camp to treat them with medicine or a priesthood blessing.`,next);
+ }},
+ {w:5,when:()=>G.supplies.food>60,run(next){const l=Math.round(G.supplies.food*rnd(8,20)/100);G.supplies.food-=l;outcome('⛈️ Spoiled Provisions',`A downpour soaks your flour barrels. ${l} lbs of food are ruined.`,next);}},
+ {w:4,when:()=>G.supplies.food>40,run(next){const l=rnd(20,50);G.supplies.food-=l;outcome('🐺 Night Raid',`Something slips into camp at night (wolves, or perhaps a thief) and makes off with ${l} lbs of food.`,next);}},
+ {w:4,when:()=>mo()>=5&&mo()<=9,run(next){const f=rnd(25,50);G.supplies.food+=f;outcome('🫐 Wild Berries',`Your children find a thicket of wild berries. You gather ${f} lbs of fruit.`,next);}},
+ {w:7,run(next){G.tradesLeft=Math.max(G.tradesLeft,2);G.faith=clamp(G.faith+2,0,100);outcome('🤝 Travelers on the Trail',`You meet ${pick(TRADERS[G.chapter]||TRADERS[1])} willing to trade, and you share news of the road. You may now use <b>Trade with others</b>. (+2 Faith)`,next);}},
+ {w:()=>G.flags.vanguard?10:5,run(next){loseDays(2);outcome('🧭 Lost the Trail',`A fork in the road confuses your company, and you wander before finding the right track. You lose 2 days.`,next);}},
+ {w:4,when:()=>G.supplies.food>150,run(next){
+   screen('🤝 A Family in Need','<p>You come upon a widow and her children whose food has run out. They have been walking behind a company that moved on. Sharing 40 lbs of food would stretch your own supplies.</p>',[
+     {label:'Share 40 lbs of food',fn:()=>{G.supplies.food-=40;G.faith=clamp(G.faith+6,0,100);outcome('A Kindness Remembered','The widow weeps with gratitude. Giving what you can lifts your spirits. (+6 Faith)',next);}},
+     {label:'Wish them well and move on',fn:()=>next()}]);
+ }},
+ {w:4,when:()=>G.supplies.oxen>2,run(next){
+   screen('🐂 Missing Ox','<p>You wake to find an ox has wandered off in the night.</p>',[
+     {label:'Spend a day or two searching',fn:()=>{loseDays(rnd(1,2));if(checkEnd())return;if(chance(.75))outcome('Found!','You find the ox grazing a mile away.',next);else{G.supplies.oxen--;outcome('Gone','Despite your search, the ox is gone.',next);}}},
+     {label:'Leave it and move on',fn:()=>{G.supplies.oxen--;outcome('Moving On',`You leave the ox behind. You have ${G.supplies.oxen} left.`,next);}}]);
+ }},
+ {w:6,when:()=>[10,11,0,1,2].includes(mo()),run(next){
+   const ok=G.supplies.clothing>=aliveM().length;
+   aliveM().forEach(m=>hurt(m,ok?4:16,'exposure'));
+   outcome('🥶 Bitter Cold',ok?'A freezing wind howls across the camp, but your warm clothing and blankets keep your family safe.':'A freezing wind howls across the camp. Without enough warm clothing, everyone suffers. Buy more clothing at the next store!',next);
+ }},
+ {w:4,when:()=>G.chapter===6&&mo()>=3&&mo()<=8,run(next){
+   screen('🦬 Buffalo Stampede!','<p>A huge herd of buffalo thunders toward your wagon train, raising a cloud of dust.</p>',[
+     {label:'Fire shots in the air to turn the herd (10 rounds)',disabled:G.supplies.ammo<10,fn:()=>{G.supplies.ammo-=10;if(chance(.75))outcome('The Herd Turns','The herd splits around your wagon and thunders past.',next);else{G.supplies.oxen=Math.max(0,G.supplies.oxen-1);outcome('Panic','The herd veers into camp and an ox is trampled.',next);}}},
+     {label:'Circle the wagons and hold the oxen steady',fn:()=>{if(chance(.55))outcome('Safe','Your family huddles as the herd passes. Nothing is lost.',next);else{const l=Math.round(G.supplies.food*.15);G.supplies.food-=l;outcome('Close Call',`The herd rips through the camp, scattering supplies. You lose ${l} lbs of food.`,next);}}}]);
+ }},
+ {w:6,when:()=>G.chapter<=2||(G.chapter===4&&G.flags.late),run(next){
+   screen('😠 Armed Men on the Road','<p>A group of armed men blocks the road and demands to know where you are going. "Mormons," one sneers. They demand a "toll" to let you pass.</p>',[
+     {label:'Pay a $10 toll',disabled:G.money<10,fn:()=>{G.money-=10;outcome('Passing Through','They take the coins and let you pass, grumbling.',next);}},
+     {label:'Take a long detour around them (lose 2 days)',fn:()=>{loseDays(2);outcome('A Long Way Around','You take muddy back roads and avoid trouble.',next);}},
+     {label:'Stand firm and refuse',fn:()=>{
+       if(chance(.5)){G.faith=clamp(G.faith+3,0,100);outcome('Standing Firm','After a tense standoff, the men lose interest and ride away. (+3 Faith)',next);}
+       else{hurt(G.party[0],18,'a beating');const l=Math.min(G.supplies.food,rnd(30,60));G.supplies.food-=l;outcome('Roughed Up',`The men rough you up and help themselves to ${l} lbs of food. (−18 health)`,next);}}}]);
+ }},
+ {w:14,when:()=>G.date.getDay()===0,run(next){
+   screen('🙏 Sabbath Day','<p>It is Sunday morning. The oxen are tired and your family is weary. You could rest for the Sabbath and hold a worship meeting.</p>',[
+     {label:'Rest and worship together (1 day)',fn:()=>{loseDays(1,true);G.faith=clamp(G.faith+5,0,100);outcome('A Day of Peace','Prayer, scripture and singing lift everyone\'s spirits. (+5 Faith)',next);}},
+     {label:'Push on, there is no time to lose',fn:()=>{G.faith=clamp(G.faith-2,0,100);next();}}]);
+ }},
+
+ {w:6,when:()=>G.supplies.food>80,run(next){
+   const l=Math.round(G.supplies.food*rnd(10,22)/100);
+   screen('🪲 Weevils in the Flour',`<p>You open a flour barrel to find it crawling with weevils. If you do nothing, about <b>${l} lbs</b> of food will be ruined.</p>`,[
+     {label:'Spend a day sifting and sorting (save half)',fn:()=>{loseDays(1);const loss=Math.round(l/2);G.supplies.food=Math.max(0,G.supplies.food-loss);if(checkEnd())return;outcome('Sifted Flour',`Your family sifts flour all day. You lose ${loss} lbs instead of ${l}.`,next);}},
+     {label:'Throw out the worst and move on',fn:()=>{G.supplies.food=Math.max(0,G.supplies.food-l);outcome('Ruined Flour',`You discard ${l} lbs of infested food.`,next);}}]);
+ }},
+ {w:5,when:()=>G.supplies.food>100,run(next){const l=rnd(30,70);G.supplies.food=Math.max(0,G.supplies.food-l);outcome('🛢️ Barrel Lost',`Over a rough stretch of road, a barrel works loose and tumbles from the wagon. By the time you notice, ${l} lbs of food are scattered and ruined.`,next);}},
+ {w:5,when:()=>mo()>=5&&mo()<=8&&G.supplies.food>60,run(next){const l=rnd(20,45);G.supplies.food=Math.max(0,G.supplies.food-l);outcome('☀️ Rancid Bacon',`The summer heat turns your bacon rancid. You throw away ${l} lbs of food.`,next);}},
+ {w:4,when:()=>G.supplies.food>70,run(next){const l=rnd(15,35);G.supplies.food=Math.max(0,G.supplies.food-l);outcome('🐀 Rats in the Wagon',`Rats chew into your sacks of cornmeal during the night. You lose ${l} lbs of food.`,next);}},
+ {w:6,when:()=>G.faith>10,run(next){
+   screen('🌙 Doubts in the Night','<p>Lying awake, you count what you have lost: home, comfort, and neighbors. A quiet voice asks whether it was all worth it.</p>',[
+     {label:'Kneel and pray through the night (costs a day of rest)',fn:()=>{loseDays(1);if(checkEnd())return;if(chance(.65)){G.faith=clamp(G.faith-1,0,100);outcome('Peace Returns','After hours of prayer, calm settles over you. (−1 Faith)',next);}else{G.faith=clamp(G.faith-6,0,100);outcome('Silence','The heavens feel quiet, and your doubts linger. (−6 Faith)',next);}}},
+     {label:'Push the thoughts away and keep moving',fn:()=>{G.faith=clamp(G.faith-6,0,100);outcome('Unspoken Doubts','The doubts do not go away. (−6 Faith)',next);}}]);
+ }},
+ {w:5,run(next){
+   screen('🚪 A Family Turns Back','<p>A family traveling near your wagon decides they have had enough. They turn their wagon around, and the father tells your children the whole venture is foolishness. Your son Thomas asks if you ever wonder the same.</p>',[
+     {label:'Bear your testimony to your family',fn:()=>{if(chance(.6)){G.faith=clamp(G.faith+1,0,100);outcome('A Testimony Shared','Your family gathers close. (+1 Faith)',next);}else{G.faith=clamp(G.faith-4,0,100);outcome('Shaken','Your words feel hollow in the wind. (−4 Faith)',next);}}},
+     {label:'Say nothing and drive on',fn:()=>{G.faith=clamp(G.faith-5,0,100);outcome('A Heavy Silence','The question hangs over your family for days. (−5 Faith)',next);}}]);
+ }},
+ {w:4,when:()=>G.chapter<=4,run(next){
+   screen('✉️ Bad News from Home','<p>A rider hands you a letter from relatives who did not join the Saints. An aunt has died, and the letter begs you to come home and forget "Mormon foolishness."</p>',[
+     {label:'Grieve with your family for a day',fn:()=>{loseDays(1,true);G.faith=clamp(G.faith-3,0,100);if(checkEnd())return;outcome('A Day of Mourning','You grieve together and then move on. (−3 Faith)',next);}},
+     {label:'Put the letter away and keep going',fn:()=>{G.faith=clamp(G.faith-7,0,100);outcome('Unresolved Grief','You say nothing, but the letter weighs on you. (−7 Faith)',next);}}]);
+ }},
+ {w:5,run(next){
+   screen('😤 Quarrel in Camp','<p>Another family accuses your son of letting your oxen graze on their grass. Voices rise, and a crowd gathers.</p>',[
+     {label:'Apologize and make amends (lose 10 lbs food)',disabled:G.supplies.food<10,fn:()=>{G.supplies.food-=10;G.faith=clamp(G.faith-1,0,100);outcome('Peace Made','The two families shake hands. (−10 lbs food, −1 Faith)',next);}},
+     {label:'Stand your ground',fn:()=>{G.faith=clamp(G.faith-6,0,100);outcome('Bad Feelings','You win the argument but lose some peace. (−6 Faith)',next);}}]);
+ }},
+ {w:4,when:()=>['rain','storm','mud'].includes(G.weather),run(next){G.faith=clamp(G.faith-4,0,100);outcome('📖 Scriptures Soaked','A leak in the wagon cover soaks the family Bible and Book of Mormon. The pages run, and Hannah weeps over them. (−4 Faith)',next);}},
+ {w:5,run(next){G.faith=clamp(G.faith-3,0,100);outcome('😢 Homesick Child','Little Eliza cries herself to sleep for the home you left behind. The sound wears on everyone. (−3 Faith)',next);}},
+ {w:4,when:()=>G.chapter<=4,run(next){G.faith=clamp(G.faith-4,0,100);loseDays(1);outcome('🗣️ Rumors of Mobs','A passing wagon brings word that armed men are gathering on the road ahead. Your family waits anxiously for a day before moving on. (−4 Faith)',next);}},
+ {w:3,run(next){const f=rnd(30,60);G.supplies.food+=f;outcome('🎁 A Kindness',`A passing farmer, moved by your family's plight, gives you ${f} lbs of cornmeal and bacon.`,next);}}
+];
+function randomEvent(next){
+  const pool=EVENTS.filter(e=>!e.when||e.when());
+  const wt=e=>typeof e.w==='function'?e.w():e.w;
+  const tot=pool.reduce((a,e)=>a+wt(e),0);let r=Math.random()*tot;
+  for(const e of pool){r-=wt(e);if(r<=0)return e.run(next);}
+  pool[0].run(next);
+}
+
+/* ================= SEQUENCER ================= */
+function runSeq(steps,done){
+  let i=0;
+  const go=()=>{
+    if(checkEnd())return;
+    while(i<steps.length&&steps[i].when&&!steps[i].when())i++;
+    if(i>=steps.length)return done();
+    steps[i++].run(go);
+  };
+  go();
+}
+
+/* ================= TITLE / SETUP ================= */
+function titleScreen(){
+  if(HUNT){clearInterval(HUNT.iv);HUNT=null;}
+  G=null;
+  screen('',`<div class="big">🐂 🛖 ⛺</div><h2 style="text-align:center;border:none">Follow the Prophet. Find Zion.</h2>
+  <p>It is 1838. As a new convert to The Church of Jesus Christ of Latter-day Saints, you will follow the Saints from <b>Kirtland, Ohio</b> to <b>Missouri</b>, through persecution and exile to <b>Nauvoo, Illinois</b>, and finally across the plains to the <b>Salt Lake Valley</b>.</p>
+  <p>Spend your money wisely, choose when to depart, hunt, trade and make hard decisions along the way. Sickness, hunger, danger and loss of faith can all end your journey. Can your family make it to Utah?</p>
+  <p><small>Inspired by The Oregon Trail. Events are drawn from Latter-day Saint history, with dates and details simplified for gameplay.</small></p>`,
+  [{label:'Begin Your Journey',cls:'primary',fn:charScreen}]);
+}
+function charScreen(){
+  screen('Who Are You?','<p>Enter your name, then choose your trade. Your trade sets your starting money and special skills.</p><input id="nameInput" maxlength="16" placeholder="Your first name (e.g. Ezra)">',
+    Object.keys(PROFS).map(k=>({label:`${PROFS[k].label}: starts with $${PROFS[k].money}<br><small>${PROFS[k].desc}</small>`,fn:()=>startGame(k)})));
+}
+function startGame(prof){
+  const raw=(($('nameInput')&&$('nameInput').value)||'').trim();
+  newGame(raw||'Ezra',prof);
+  screen('Kirtland, Ohio — 1838',`<p>Not long ago, missionaries brought the restored gospel to your door, and you were baptized. You have watched the Saints worship in the Kirtland Temple, dedicated in 1836. But hard times have come. The Kirtland Safety Society has failed, neighbors who once welcomed the Saints now mock them, and the Prophet <b>Joseph Smith</b> fled Kirtland in January for <b>Far West, Missouri</b>, where the Saints are gathering.</p><p>You, <b>${G.name}</b>, have decided to take your wife Hannah, your son Thomas and your daughter Eliza and follow the Prophet. It is about 860 miles to Far West. You have a trade of <b>${PROFS[prof].label.toLowerCase()}</b> and $${G.money} to prepare.</p>`,
+    [{label:'Choose when to depart',cls:'primary',fn:departKirtland}]);
+}
+function departKirtland(){
+  chooseDeparture({title:'When Will You Depart?',intro:'<p>The time you leave determines the weather you face and the company you keep.</p>',options:[
+    {label:'❄️ January 20, 1838',sub:'Leave now, in deep winter. Snow and cold slow you and sap your health, but you reach Missouri early.',date:[1838,0,20]},
+    {label:'🌧️ March 20, 1838',sub:'The thaw brings mud and rain, but the cold is easing.',date:[1838,2,20]},
+    {label:'☀️ May 20, 1838',sub:'Good traveling weather, though spring storms swell the rivers.',date:[1838,4,20]},
+    {label:'🏕️ July 6, 1838: join the Kirtland Camp',sub:'An organized company of about 500 Saints. Safety in numbers (+5 Faith, +50 lbs food, extra trading), but the camp moves slowly and you arrive in autumn, just as conflict in Missouri comes to a head.',date:[1838,6,6],apply:()=>{G.flags.camp=true;G.faith=clamp(G.faith+5,0,100);G.supplies.food+=50;}}
+  ],store:{name:'Kirtland General Store',mult:1.0},go:()=>startChapter(1)});
+}
+
+/* ================= MISSOURI ================= */
+function missouriSequence(){
+  G.chapter=2;G.region='east';
+  runSeq([
+    {run:sceneFarWest},
+    {run:sceneElection,when:()=>before(1838,7,6)},
+    {run:sceneDeWitt,when:()=>before(1838,9,12)},
+    {run:sceneExterm},
+    {run:sceneSurrender},
+    {run:sceneLiberty},
+    {run:sceneCovenant}
+  ],()=>{
+    setDate(1839,1,10);
+    const st={name:'Far West Traders',mult:1.4};
+    openStore(st.name,st.mult,()=>readyCheck(st.name,st.mult,()=>startChapter(2)));
+  });
+}
+function sceneFarWest(n){
+  const late=!before(1838,7,6);
+  screen('🏘️ Far West, Missouri',`<p>After weeks on the road, you reach <b>Far West</b>, the new gathering place of the Saints. Joseph Smith, who arrived in March, welcomes the newcomers and counsels them to build homes and farms near the city. A site for a new temple has been marked out.</p><p>${late?'It is autumn, and tension with neighboring settlers is near the breaking point.':'Settlers in neighboring counties watch the growing number of Mormons with suspicion.'} How will you spend your first weeks among the Saints?</p>`,[
+    {label:'💼 Work at your trade (wages)',fn:()=>{const p=rnd(40,60)+(G.perk.wage?15:0);G.money+=p;outcome('Hard Work',`You earn <b>$${p}</b> helping the growing town.`,n);}},
+    {label:'🌽 Farm a plot (food)',fn:()=>{const f=Math.round(rnd(90,140)*(G.perk.farm?1.3:1));G.supplies.food+=f;outcome('A Good Harvest',`You gather <b>${f} lbs</b> of food.`,n);}},
+    {label:'🏛️ Help prepare the temple site (Faith)',fn:()=>{G.faith=clamp(G.faith+7,0,100);outcome('Building Zion','Working shoulder to shoulder with the Saints strengthens your testimony. <b>(+7 Faith)</b>',n);}}
+  ]);
+}
+function sceneElection(n){
+  setDate(1838,7,6);
+  screen('🗳️ Election Day at Gallatin — August 6, 1838','<p>In Daviess County, a candidate for the legislature has urged that Mormons not be allowed to vote. When Latter-day Saints arrive at the polls in Gallatin, fists fly. By evening, wild rumors of beatings and killings spread, and neighbors on both sides begin to arm themselves.</p><p>The next morning, you hear of the fight. What do you do?</p>',[
+    {label:'Ride to Gallatin to stand with your neighbors',fn:()=>{G.faith=clamp(G.faith+3,0,100);if(chance(.4)){hurt(G.party[0],20,'injuries');outcome('Caught in the Scuffle','You get caught in a brawl and take some hard blows, but stand by your fellow Saints. (−20 health, +3 Faith)',n);}else outcome('Standing Together','You arrive after the fighting has died down and help bring comfort to the families affected. (+3 Faith)',n);}},
+    {label:'Stay home and keep your family safe',fn:()=>outcome('Keeping Out of It','You keep your family close to home and out of harm\'s way, but the fear lingers.',n)},
+    {label:'Take 30 lbs of food to families who fled their homes',disabled:G.supplies.food<30,fn:()=>{G.supplies.food-=30;G.faith=clamp(G.faith+5,0,100);outcome('Charity','Frightened families gratefully accept your help. (−30 lbs food, +5 Faith)',n);}}
+  ]);
+}
+function sceneDeWitt(n){
+  setDate(1838,9,6);
+  screen('🏚️ The Siege of DeWitt — October 1838','<p>At DeWitt, a river town where Saints have settled, armed neighbors have surrounded the settlement. Food is running out, and appeals to state officials go unanswered. News reaches Far West that families there are going hungry.</p>',[
+    {label:'Carry 60 lbs of food through the lines to DeWitt',disabled:G.supplies.food<60,fn:()=>{G.supplies.food-=60;G.faith=clamp(G.faith+6,0,100);outcome('Bread for the Hungry','You slip through with your supplies. The families are overjoyed. (−60 lbs food, +6 Faith)',n);}},
+    {label:'Stay in Far West and pray for them',fn:()=>outcome('Waiting and Worrying','Days later, the DeWitt Saints are forced to leave and make their way to Far West, many sick and weary.',n)}
+  ]);
+}
+function sceneExterm(n){
+  setDate(1838,9,27);
+  screen('📜 The Extermination Order — October 27, 1838','<p>Missouri Governor Lilburn Boggs issues Executive Order 44, declaring that the Mormons "must be treated as enemies, and must be exterminated or driven from the State." Militia companies gather near Far West, and Saints in outlying settlements are in grave danger.</p><p>Some families are gathering at the small settlement of <b>Haun\'s Mill</b> on Shoal Creek, where the Saints have reached a peace understanding with local militia. Others crowd into Far West around Joseph. Where do you take your family?</p>',[
+    {label:'Go to Haun\'s Mill (a mill that can grind your corn: +40 lbs food)',fn:()=>{G.supplies.food+=40;sceneHauns(n);}},
+    {label:'Stay with the main body of Saints in Far West',fn:()=>{G.faith=clamp(G.faith-3,0,100);outcome('Fear in Far West','You stay with the main body of Saints. A few days later, terrible news arrives of a massacre at Haun\'s Mill, where more than a dozen Saints were killed. Your heart aches. (−3 Faith)',n);}}
+  ]);
+}
+function sceneHauns(n){
+  setDate(1838,9,30);
+  screen('⚠️ Haun\'s Mill — October 30, 1838','<p>Late in the afternoon, about 200 armed militiamen thunder into the settlement without warning. Men, women and children scatter. Some run to shelter in the blacksmith shop. Others flee toward the woods across the mill pond. You have only seconds to choose.</p>',[
+    {label:'Take shelter in the blacksmith shop with the other men',fn:()=>{
+      if(chance(.2)){hurt(G.party[0],55,'gunshot wounds');outcome('Wounded','Gunfire pours through the gaps between the logs. You are badly wounded but survive, though many around you are not. (−55 health)',n);}
+      else gameOver(`You took shelter in the blacksmith shop at Haun's Mill. The militia fired through the gaps in the logs, and ${G.name} did not survive the massacre.`);}},
+    {label:'Grab your family and run across the mill pond into the woods',fn:()=>{
+      const l=Math.round(G.supplies.food*.4);G.supplies.food-=l;aliveM().forEach(m=>hurt(m,10));G.faith=clamp(G.faith-6,0,100);
+      let t=`Bullets whistle past as your family scrambles into the brush and hides until dark. You lose ${l} lbs of food in the flight. (−6 Faith)`;
+      if(chance(.12)){hurt(G.party[0],35,'wounds');t+=' You are grazed by a bullet. (−35 health)';}
+      outcome('Escape into the Woods',t,n);}},
+    {label:'Walk toward the militia with a white cloth and plead for mercy',fn:()=>{
+      if(chance(.3)){G.faith=clamp(G.faith-4,0,100);outcome('Mercy','A militiaman lowers his rifle and waves your family away. You flee, shaken. (−4 Faith)',n);}
+      else gameOver(`You walked toward the militia at Haun's Mill pleading for peace, but there was no mercy that day. ${G.name} did not survive.`);}}
+  ]);
+}
+function sceneSurrender(n){
+  setDate(1838,10,1);
+  screen('🏳️ The Surrender of Far West','<p>On October 31, under a flag of truce, Joseph Smith and other leaders are taken prisoner by the Missouri militia. A court-martial sentences them to be shot, but Brigadier General Alexander Doniphan refuses to carry out the order, calling it cold-blooded murder. The militia disarms the Saints and demands that they leave the state.</p><p>Soldiers go from house to house collecting weapons.</p>',[
+    {label:'Hand over your firearms and ammunition',fn:()=>{const k=Math.floor(G.supplies.ammo/4);G.supplies.ammo=k;outcome('Disarmed',`You hand over your guns. Soldiers take most of your ammunition. (${k} rounds left)`,n);}},
+    {label:'Hide your musket and ammunition in the cornfield',fn:()=>{
+      if(chance(.5))outcome('Hidden Away','The soldiers search the house but never find your hidden cache.',n);
+      else{hurt(G.party[0],20,'a beating');G.supplies.ammo=0;G.faith=clamp(G.faith-4,0,100);outcome('Discovered','Soldiers find the hiding place. You are beaten and lose all your ammunition. (−20 health, −4 Faith)',n);}}}
+  ]);
+}
+function sceneLiberty(n){
+  setDate(1838,11,20);
+  screen('⛓️ Liberty Jail — Winter 1838–39','<p>Joseph Smith and several other leaders are held in <b>Liberty Jail</b>, a cold, cramped stone jail, for months without trial. From that cell Joseph cried out, "O God, where art thou?" and was told that his adversity would be but a small moment and would be for his good. Those words are now part of Doctrine and Covenants 121–123.</p><p>Meanwhile the Saints, destitute, are ordered out of Missouri. What will you do this winter?</p>',[
+    {label:'Carry a basket of food (30 lbs) to the prisoners',disabled:G.supplies.food<30,fn:()=>{G.supplies.food-=30;G.faith=clamp(G.faith+8,0,100);outcome('A Visit to Liberty','The guards let you pass the food through. Joseph\'s gratitude and calm strengthen your own faith. (−30 lbs food, +8 Faith)',n);}},
+    {label:'Sign a petition asking Missouri authorities for justice',fn:()=>{G.faith=clamp(G.faith+3,0,100);outcome('A Petition for Justice','You add your name with hundreds of others, though few expect it to help. (+3 Faith)',n);}},
+    {label:'Focus on preparing your family to leave',fn:()=>{G.supplies.parts+=1;outcome('Preparing to Leave','You repair your wagon and gear. (+1 spare wagon part)',n);}}
+  ]);
+}
+function sceneCovenant(n){
+  setDate(1839,0,29);
+  screen('✍️ The Covenant — January 29, 1839','<p>At a meeting in Far West, the Saints sign a covenant to help every poor family leave Missouri. Brigham Young, senior member of the Quorum of the Twelve, directs the exodus. There are not enough wagons for everyone.</p>',[
+    {label:'Offer room in your wagon to a widow and her child (−20 lbs food)',disabled:G.supplies.food<20,fn:()=>{G.supplies.food-=20;G.faith=clamp(G.faith+7,0,100);outcome('Keeping the Covenant','The widow and her child ride with your family. (−20 lbs food, +7 Faith)',n);}},
+    {label:'Keep your wagon for your own family',fn:()=>outcome('Moving Out','You focus on getting your own family to safety.',n)}
+  ]);
+}
+function sceneQuincy(){
+  outcome('🏠 Quincy, Illinois','<p>The Mississippi lies ahead, and across it Quincy. The people of Quincy open their homes to the exiled Saints, and a relief committee forms to feed and shelter them. In April, Joseph Smith, who escaped his guards, joins the Saints. Soon the Saints purchase swampy land at a bend of the river called Commerce.</p><p>You have survived the exodus. A new chapter begins.</p>',nauvooSequence);
+}
+
+/* ================= NAUVOO ================= */
+const NAUVOO_ACTIONS=[
+ {label:'💼 Work at your trade (earn wages)',run(){const p=rnd(30,45)+(G.perk.wage?15:0)+(G.perk.trade?10:0);G.money+=p;return `You work long days as a ${PROFS[G.prof].label.toLowerCase()} and earn <b>$${p}</b>.`;}},
+ {label:'🌾 Farm a garden plot (food)',run(){const f=Math.round(rnd(80,130)*(G.perk.farm?1.3:1));G.supplies.food+=f;return `Your garden yields <b>${f} lbs</b> of food.`;}},
+ {label:'🏛️ Labor on the Nauvoo Temple (Faith)',cond:()=>G.date.getFullYear()>=1841,run(){const f=G.perk.repair?10:8;G.faith=clamp(G.faith+f,0,100);return `You donate your labor to the temple on the bluff. <b>+${f} Faith</b>.`;}},
+ {label:'⚔️ Join the Nauvoo Legion ($15)',cond:()=>G.date.getFullYear()>=1841&&!G.flags.legion&&G.money>=15,run(){G.money-=15;G.flags.legion=true;G.supplies.ammo+=20;G.faith=clamp(G.faith+3,0,100);return 'You enlist in the Nauvoo Legion, the city militia, and drill with Nauvoo\'s citizen-soldiers. You buy a uniform and receive 20 rounds of ammunition. <b>+3 Faith</b>.';}},
+ {label:'🙏 Study the scriptures and attend meetings (Faith)',run(){G.faith=clamp(G.faith+6,0,100);return 'You hear the Saints preach in the grove and study the scriptures with your family. <b>+6 Faith</b>.';}},
+ {label:'🛠️ Build wagon parts and prepare gear',run(){const n=G.perk.repair?2:1;G.supplies.parts+=n;return `You build <b>${n}</b> set(s) of spare wagon parts.`;}},
+ {label:'🛌 Rest and recover',run(){G.party.forEach(m=>{if(m.alive){m.health=clamp(m.health+25,0,100);if(m.ill&&chance(.7))m.ill=null;}});return 'Your family rests and regains strength.';}},
+ {label:'📜 Receive your temple endowment (Faith)',cond:()=>G.date.getFullYear()===1845&&!G.flags.endowed,run(){G.flags.endowed=true;G.faith=clamp(G.faith+12,0,100);return 'In the unfinished Nauvoo Temple, you and your family receive sacred ordinances along with thousands of other Saints. <b>+12 Faith</b>.';}}
+];
+const nCfg=(intro,done)=>({title:'🏘️ Life in Nauvoo',intro,actions:NAUVOO_ACTIONS,store:{name:'Nauvoo Mercantile',mult:1.0},done});
+function nauvooSequence(){
+  G.chapter=3;G.atRoute=false;G.region='east';
+  runSeq([
+    {run:sceneCommerce},
+    {run:n=>hub(nCfg('<b>Summer 1839.</b> The Saints drain swamps, build log homes and plant gardens on the bluff, and rename the place <b>Nauvoo</b>. You have a season to rebuild your life.',n),2)},
+    {run:sceneCharter},
+    {run:n=>hub(nCfg('<b>1841.</b> Nauvoo is booming, with new homes, a growing temple and the Nauvoo Legion drilling on the parade ground. How will you spend your time?',n),2)},
+    {run:sceneMartyrdom},
+    {run:sceneSuccession},
+    {run:n=>{setDate(1844,9,15);hub(nCfg('<b>Autumn 1844.</b> Nauvoo is in mourning, but work on the temple must go on. Brigham Young urges the Saints to finish it.',n),1);}},
+    {run:sceneMorley},
+    {run:n=>{setDate(1845,11,12);hub(nCfg('<b>December 1845.</b> The Nauvoo Temple, though unfinished, is opened for sacred ordinances. At the same time, wagons are being built all over the city for the coming exodus.',n),2);}},
+    {run:sceneSellHome}
+  ],departNauvoo);
+}
+function hub(cfg,slots,msg){
+  const btns=cfg.actions.filter(a=>!a.cond||a.cond()).map(a=>({label:a.label,disabled:slots<=0,fn:()=>{const t=a.run();if(checkEnd())return;hub(cfg,slots-1,t);}}));
+  btns.push({label:'🏪 Visit the store',fn:()=>openStore(cfg.store.name,cfg.store.mult,()=>hub(cfg,slots,msg))});
+  btns.push({label:slots>0?'➡️ Move on (skip remaining time)':'➡️ Continue',cls:'primary',fn:cfg.done});
+  screen(cfg.title,(msg?`<div class="result">${msg}</div>`:'')+`<p>${cfg.intro}</p><p><b>⏳ Time left this season: ${slots}</b></p>`,btns);
+}
+function sceneCommerce(n){
+  setDate(1839,6,20);G.chapter=3;
+  const sick=aliveM().sort(()=>Math.random()-.5).slice(0,2);
+  sick.forEach(m=>{m.ill='malaria (ague)';hurt(m,15);});
+  const names=sick.map(m=>m.name).join(' and ');
+  screen('🌾 Commerce, Illinois — Summer 1839',`<p>Joseph Smith has purchased swampy riverside land at Commerce, Illinois. Mosquitoes and malarial "ague" plague the exiles, and tents and wagons fill with the sick. On July 22, 1839, a sick Joseph rose from his bed and went among the afflicted, healing many along the riverbank.</p><p><b>${names}</b> have fallen ill with ague. What do you do?</p>`,[
+    {label:'Seek a priesthood blessing for the sick',fn:()=>{G.faith=clamp(G.faith+6,0,100);if(chance(.9)){sick.forEach(m=>{m.ill=null;});outcome('A Healing Blessing',`After the blessing, ${names} rise from their beds restored. (+6 Faith)`,n);}else{sick.forEach(m=>{m.ill=null;hurt(m,15);});outcome('A Slow Recovery',`The fever breaks slowly, and ${names} are weak. (+6 Faith)`,n);}}},
+    {label:`Use quinine and herbal remedies (${sick.length} doses)`,disabled:G.supplies.medicine<sick.length,fn:()=>{G.supplies.medicine-=sick.length;sick.forEach(m=>{m.ill=null;});outcome('Medicine Helps',`The remedies break the fever. (−${sick.length} medicine)`,n);}},
+    {label:'Rest and hope the fever passes',fn:()=>{sick.forEach(m=>{hurt(m,30);m.ill=null;});outcome('A Hard Summer',`After weeks of fever, ${names} finally recover, thin and weak.`,n);}}
+  ]);
+}
+function sceneCharter(n){
+  setDate(1841,3,6);
+  outcome('🏛️ The City Beautiful','<p>In December 1840, the Illinois legislature granted Nauvoo a liberal city charter, including a university and the <b>Nauvoo Legion</b>, a city militia with Joseph Smith as lieutenant general. In April 1841, the cornerstones of the <b>Nauvoo Temple</b> were laid. Converts from many nations pour into Nauvoo, which grows into one of the largest cities in Illinois.</p>',n);
+}
+function sceneMartyrdom(n){
+  setDate(1844,5,27);
+  const l=G.flags.legion?'As a member of the Nauvoo Legion, you help keep order as the city mourns.':'You stand with your family and neighbors as the city mourns.';
+  screen('🕯️ Carthage Jail — June 27, 1844','<p>On the afternoon of June 27, an armed mob storms Carthage Jail, where Joseph and Hyrum Smith are being held. Both are killed. Their bodies are returned to Nauvoo, where thousands file past in grief.</p><p>'+l+'</p>',[
+    {label:'Attend the funeral procession and mourn with the Saints',fn:()=>{G.faith=clamp(G.faith+3,0,100);outcome('A City in Sorrow','Nauvoo is quiet and heartbroken. You find comfort in the company of fellow Saints. (+3 Faith)',n);}},
+    {label:'Stay home and comfort your family',fn:()=>outcome('A Quiet Grief','Your family gathers in grief and uncertainty.',n)}
+  ]);
+}
+function sceneSuccession(n){
+  setDate(1844,7,8);
+  screen('🗳️ Who Will Lead the Church? — August 1844','<p>Two months after the martyrdom, the Saints gather in a meeting. Sidney Rigdon, who served as a counselor to Joseph, says he should be "guardian" of the Church. Brigham Young and the Quorum of the Twelve Apostles, who have just returned to Nauvoo, say that authority rests with the Twelve. Another man, James Strang, produces a letter claiming Joseph appointed him. Many who attend the meeting later testify that when Brigham Young spoke, he looked and sounded like Joseph.</p><p>Whom will you sustain?</p>',[
+    {label:'Sustain the Twelve Apostles led by Brigham Young',fn:()=>{G.faith=clamp(G.faith+10,0,100);G.flags.brigham=true;outcome('The Twelve Sustained','The congregation votes to sustain the Twelve. You leave the meeting with peace in your heart. (+10 Faith)',n);}},
+    {label:'Follow Sidney Rigdon as guardian of the Church',fn:()=>gameOver('You follow Sidney Rigdon east to Pittsburgh, where his small church soon fades. Your family never joins the westward exodus, and the Utah Trail is not your road.')},
+    {label:'Follow James Strang, who claims a letter of appointment',fn:()=>gameOver('You follow James Strang to Wisconsin, where a new community is founded. Your family never joins the westward exodus, and the Utah Trail is not your road.')}
+  ]);
+}
+function sceneMorley(n){
+  setDate(1845,8,15);
+  screen('🔥 Morley Settlement Burned — September 1845','<p>Anti-Mormon mobs begin burning homes and outbuildings in the Latter-day Saint settlements around Nauvoo, including Morley (Lima). Over a hundred buildings go up in flames, and refugees stream into Nauvoo with whatever they could carry.</p>',[
+    {label:'Ride out to protect the refugees',fn:()=>{
+      if(G.flags.legion){G.faith=clamp(G.faith+6,0,100);outcome('Duty Done','As a member of the Nauvoo Legion, you escort families safely to Nauvoo. (+6 Faith)',n);}
+      else{G.faith=clamp(G.faith+4,0,100);if(chance(.3)){hurt(G.party[0],20,'injuries');outcome('A Rough Ride','Unarmed and untrained, you take a hard blow while helping families flee. (−20 health, +4 Faith)',n);}else outcome('Helping Hand','You help families reach safety. (+4 Faith)',n);}}},
+    {label:'Open your home to refugees (−40 lbs food)',disabled:G.supplies.food<40,fn:()=>{G.supplies.food-=40;G.faith=clamp(G.faith+6,0,100);outcome('Room for All','Your home fills with weary families. (−40 lbs food, +6 Faith)',n);}},
+    {label:'Stay home and keep your family safe',fn:()=>outcome('Anxious Days','Nauvoo is tense and frightened, but your family stays safe.',n)}
+  ]);
+}
+function sceneSellHome(n){
+  setDate(1846,0,15);
+  screen('🏠 Leaving Everything Behind — January 1846','<p>Under growing mob threats and pressure from state officials, Brigham Young and the Twelve decide the Saints must leave Nauvoo early. Homes, farms and the beautiful temple will be left behind. You must decide what to do with your property.</p>',[
+    {label:'Sell now for quick cash ($130)',fn:()=>{G.money+=130;outcome('A Quick Sale','You sell your home and lot far below their worth. (+$130)',n);}},
+    {label:'Hold out for a better price (50% for $250, 50% for $40)',fn:()=>{if(chance(.5)){G.money+=250;outcome('A Fair Offer','A buyer pays a fair price. (+$250)',n);}else{G.money+=40;outcome('Almost Nothing','Buyers wait for you to leave and offer almost nothing. (+$40)',n);}}},
+    {label:'Leave it and take your chances',fn:()=>outcome('Left Behind','You lock the door and leave without selling.',n)}
+  ]);
+}
+function departNauvoo(){
+  chooseDeparture({title:'When Will You Leave Nauvoo?',intro:'<p>The first wagons are crossing the Mississippi. The longer you wait, the more time you have to prepare, but the more dangerous it becomes.</p>',options:[
+    {label:'❄️ February 4, 1846: with the first wagons',sub:'Bitter cold and river ice, but you leave with Brigham Young and ahead of the worst mobs. (+3 Faith)',date:[1846,1,4],apply:()=>{G.faith=clamp(G.faith+3,0,100);}},
+    {label:'🌧️ March 15, 1846',sub:'Mud and rain, but you finish packing. (+1 spare wagon part)',date:[1846,2,15],apply:()=>{G.supplies.parts+=1;}},
+    {label:'🌸 May 1, 1846',sub:'More time to earn and prepare (+$30, +40 lbs food), but mobs are closing in and harass departing families (−20% food, −4 Faith).',date:[1846,4,1],apply:()=>{G.money+=30;G.supplies.food+=40;const l=Math.round(G.supplies.food*.2);G.supplies.food-=l;G.faith=clamp(G.faith-4,0,100);G.flags.late=true;G.banner+='<p>Armed vigilantes harass departing families, and you lose supplies in the chaos.</p>';}}
+  ],store:{name:'Nauvoo Mercantile',mult:1.0},go:()=>startChapter(4)});
+}
+
+/* ================= IOWA ================= */
+function sceneSugarCreek(n){
+  screen('⛺ Sugar Creek, Iowa Territory','<p>You have crossed the Mississippi and reached the first camp of the exodus. Wagons, tents and campfires dot the bank as Brigham Young and the Twelve organize the Saints into companies. Babies are born in wagons and tents in the cold.</p><p>Waiting a couple of days would let you join an organized company, but supplies will dwindle.</p>',[
+    {label:'Join an organized company and rest 2 days',fn:()=>{loseDays(2,true);G.faith=clamp(G.faith+3,0,100);G.tradesLeft=3;outcome('An Organized Camp','You are assigned to a company and share news with neighbors. (+3 Faith)',n);}},
+    {label:'Press on without waiting',fn:()=>n()}
+  ]);
+}
+function sceneGardenGrove(n){
+  screen('🌱 Garden Grove, Iowa','<p>In April 1846, Saints established Garden Grove, splitting rails, building cabins and planting crops so that families behind them would have food to harvest. It is hard work, but a gift for those who follow.</p>',[
+    {label:'Spend 3 days helping to plant and build (+6 Faith)',fn:()=>{loseDays(3,true);G.faith=clamp(G.faith+6,0,100);G.supplies.food+=30;outcome('Planting for Others','You work alongside hundreds of Saints. The settlement shares 30 lbs of food with you. (+6 Faith, +30 lbs food)',n);}},
+    {label:'Push on',fn:()=>n()}
+  ]);
+}
+function sceneMtPisgah(n){
+  screen('🪦 Mount Pisgah, Iowa','<p>Mount Pisgah was settled in May 1846 as another way station. Malaria and other fevers sweep through the camp, and many graves dot the hillside. The sick need nursing.</p>',[
+    {label:'Help care for the sick for 3 days (+6 Faith, some risk)',fn:()=>{loseDays(3,true);G.faith=clamp(G.faith+6,0,100);const c=aliveM().filter(m=>!m.ill);if(c.length&&chance(.3)){const m=pick(c);m.ill='ague (malaria)';G.banner+=`<p>🤒 ${m.name} catches the fever.</p>`;}outcome('Serving the Sick','Your family\'s service is a blessing to many. (+6 Faith)',n);}},
+    {label:'Move on quickly',fn:()=>n()}
+  ]);
+}
+function sceneBattalion(n){
+  setDate(Math.max(G.date.getFullYear(),1846),Math.max(G.date.getMonth(),6),G.date.getDate());
+  screen('🎖️ Council Bluffs — The Mormon Battalion','<p>In July 1846, Captain James Allen of the U.S. Army arrives to enlist 500 Latter-day Saint men for the war with Mexico. Brigham Young urges the men to volunteer, and the soldiers\' pay will help the families left behind. Wives and children say goodbye to husbands and fathers.</p>',[
+    {label:'Donate $15 to help the families of the volunteers',disabled:G.money<15,fn:()=>{G.money-=15;G.faith=clamp(G.faith+5,0,100);outcome('A Gift of Charity','You give what you can. (−$15, +5 Faith)',n);}},
+    {label:'Wish them well and continue',fn:()=>n()}
+  ]);
+}
+
+/* ================= WINTER QUARTERS ================= */
+const WQ_ACTIONS=[
+ {label:'💼 Work for wages (sawmill and cabin building)',run(){const p=rnd(25,40)+(G.perk.wage?15:0)+(G.perk.trade?10:0);G.money+=p;return `You earn <b>$${p}</b>.`;}},
+ {label:'🥔 Gather and dry vegetables (food)',run(){const f=Math.round(rnd(60,100)*(G.perk.farm?1.3:1));G.supplies.food+=f;return `You gather <b>${f} lbs</b> of food.`;}},
+ {label:'🏠 Build a sturdy log cabin',cond:()=>!G.flags.cabin,run(){G.flags.cabin=true;return 'You build a snug log cabin that will help your family through the winter.';}},
+ {label:'🤲 Nurse the sick and serve your neighbors (Faith)',run(){G.faith=clamp(G.faith+6,0,100);return 'You tend to neighbors stricken with fever. <b>+6 Faith</b>.';}},
+ {label:'🐂 Do hard labor in exchange for an ox',run(){if(chance(.6)){G.supplies.oxen+=1;return 'A farmer pays your labor with <b>1 ox</b>.';}G.money+=20;return 'The farmer can only pay <b>$20</b>.';}},
+ {label:'🛠️ Prepare your wagon (spare parts)',run(){const n=G.perk.repair?2:1;G.supplies.parts+=n;return `You build <b>${n}</b> set(s) of wagon parts.`;}},
+ {label:'🛌 Rest and recover',run(){G.party.forEach(m=>{if(m.alive){m.health=clamp(m.health+25,0,100);if(m.ill&&chance(.7))m.ill=null;}});return 'Your family rests and regains strength.';}}
+];
+const wqCfg=(intro,done)=>({title:'🏘️ Winter Quarters',intro,actions:WQ_ACTIONS,store:{name:'Winter Quarters Store',mult:1.3},done});
+function sceneWQ(){
+  G.chapter=5;G.atRoute=false;G.region='iowa';
+  if(G.date<new Date(1846,8,15))setDate(1846,8,15);
+  outcome('🏘️ Winter Quarters','<p>You reach the west bank of the Missouri River, where Brigham Young has directed the Saints to build a temporary city. By winter, thousands of Saints live here in hundreds of log cabins, sod-roofed huts and dugouts, but sickness and hunger are never far away.</p><p>You cannot continue west until spring.</p>',wqSequence);
+}
+function wqSequence(){
+  runSeq([
+    {run:n=>hub(wqCfg('<b>Autumn 1846.</b> Winter is coming, and every family must prepare.',n),2)},
+    {run:sceneWinter},
+    {run:n=>hub(wqCfg('<b>Early 1847.</b> The worst of winter is past. Brigham Young is organizing a Pioneer Company to blaze the trail west.',n),2)}
+  ],departWQ);
+}
+function sceneWinter(n){
+  setDate(1847,0,20);
+  const cab=G.flags.cabin;
+  screen('❄️ A Winter of Sickness',`<p>Scurvy ("black canker"), chills and fever, and exposure sweep through Winter Quarters, and more than 350 Saints die that winter. ${cab?'Your sturdy cabin helps keep your family warm.':'Your family lives in a cramped, drafty dugout.'}</p>`,[
+    {label:'Buy potatoes, onions and vegetables ($15)',disabled:G.money<15,fn:()=>{G.money-=15;G.faith=clamp(G.faith+2,0,100);outcome('Fresh Vegetables','The vegetables keep your family from scurvy. (−$15, +2 Faith)',n);}},
+    {label:'Use medicine (2 doses)',disabled:G.supplies.medicine<2,fn:()=>{G.supplies.medicine-=2;outcome('Remedies at Hand','Your family gets through the winter in good health. (−2 medicine)',n);}},
+    {label:'Trust to rest and prayer',fn:()=>{
+      const p=cab?.25:.45;let sick=[];
+      aliveM().forEach(m=>{if(chance(p)){hurt(m,rnd(15,30),'scurvy');if(m.alive){m.ill='scurvy';sick.push(m.name);}}});
+      outcome('A Hard Winter',sick.length?`${sick.join(', ')} fall ill with scurvy before spring.`:'Your family comes through the winter in remarkably good health.',n);}}
+  ]);
+}
+function departWQ(){
+  chooseDeparture({title:'When Will You Depart for the Valley?',intro:'<p>Brigham Young is organizing a Pioneer Company to blaze the trail. Families will follow in waves through the summer. The sooner you leave, the more grass for your oxen, but the rougher the roads. A late start risks early mountain snow.</p>',options:[
+    {label:'🌱 April 5, 1847: join the Vanguard Pioneer Company',sub:'Break the trail with Brigham Young. More getting lost and rough roads, but +5 Faith and +60 lbs of food from the company.',date:[1847,3,5],apply:()=>{G.flags.vanguard=true;G.faith=clamp(G.faith+5,0,100);G.supplies.food+=60;}},
+    {label:'🌿 May 15, 1847: leave with an early family company',sub:'A balanced start, following the first wagon tracks.',date:[1847,4,15]},
+    {label:'☀️ June 20, 1847: leave with a late summer company',sub:'You earn +$25 more, but the grass has been eaten by earlier companies, so oxen are likelier to die, and you risk early snow in the mountains.',date:[1847,5,20],apply:()=>{G.flags.lateGrass=true;G.money+=25;}}
+  ],store:{name:'Winter Quarters Store',mult:1.3},go:()=>startChapter(6)});
+}
+
+/* ================= TRAIL LANDMARK SCENES ================= */
+function scenePawnee(n){
+  screen('🏹 Loup Fork — Pawnee Country','<p>You enter the homeland of the Pawnee people, who have lost land and food sources to the flood of travelers. Pawnee riders approach your camp. Some bands have taken cattle from passing companies. How do you respond?</p>',[
+    {label:'Offer a gift of 40 lbs of food and speak peacefully',disabled:G.supplies.food<40,fn:()=>{G.supplies.food-=40;G.faith=clamp(G.faith+2,0,100);outcome('Goodwill','The gift is accepted, and the riders leave in peace. (−40 lbs food, +2 Faith)',n);}},
+    {label:'Offer to trade with them',fn:()=>{G.tradesLeft=Math.max(G.tradesLeft,3);outcome('A Fair Trade','The Pawnee are interested in trade. You may now use <b>Trade with others</b>.',n);}},
+    {label:'Keep your wagons circled and watch closely',fn:()=>{if(chance(.25)){G.supplies.oxen=Math.max(0,G.supplies.oxen-1);outcome('A Night Raid','During the night, an ox is taken from the herd.',n);}else outcome('An Uneasy Night','The riders pass by, and the night is quiet.',n);}}
+  ]);
+}
+function sceneBuffalo(n){
+  screen('🦬 Platte Valley — Buffalo Country','<p>The prairie stretches in every direction, dotted with huge herds of buffalo. This is the best hunting you will find.</p>',[
+    {label:'Hunt buffalo',fn:()=>huntScreen({bison:true})},
+    {label:'Move on',fn:()=>n()}
+  ]);
+}
+function sceneIndependence(n){
+  screen('🪨 Independence Rock','<p>Independence Rock is a granite mound covered with the names of emigrants who passed this way. Many travelers hope to reach it by early summer.</p>',[
+    {label:'Carve your family\'s name (1 day, +2 Faith)',fn:()=>{loseDays(1);G.faith=clamp(G.faith+2,0,100);outcome('Your Mark','You leave your name on the rock. (+2 Faith)',n);}},
+    {label:'Move on',fn:()=>n()}
+  ]);
+}
+function sceneBridger(n){
+  screen('🧔 Jim Bridger','<p>The famed mountain man Jim Bridger meets the Mormon companies on the trail. He praises the Great Basin\'s beauty but doubts that crops will grow in its alkali soil and short season.</p>',[
+    {label:'Trade with Bridger\'s party',fn:()=>{G.tradesLeft=Math.max(G.tradesLeft,3);outcome('Trade Opportunity','Bridger\'s party has goods to trade. You may now use <b>Trade with others</b>.',n);}},
+    {label:'Thank him and continue',fn:()=>n()}
+  ]);
+}
+function sceneEcho(n){
+  const c=aliveM().filter(m=>!m.ill);
+  let t='<p>Echo Canyon\'s red cliffs tower above your wagon. In 1847, mountain fever (Colorado tick fever) struck many in the Pioneer Company, including Brigham Young himself.</p>';
+  if(c.length){const m=pick(c);m.ill='mountain fever';hurt(m,10);t+=`<p>🤒 <b>${m.name}</b> comes down with mountain fever.</p>`;}
+  outcome('🏞️ Echo Canyon',t,n);
+}
+function sceneEmigration(n){
+  screen('🌲 Emigration Canyon','<p>The final descent into the valley follows a tangled canyon. Thick willows, brush and fallen trees block the way, and advance parties have had to hack out a road.</p>',[
+    {label:'Spend 3 days cutting a safe road (−8 health each)',fn:()=>{loseDays(3);aliveM().forEach(m=>hurt(m,8));G.faith=clamp(G.faith+3,0,100);outcome('Road Cleared','You work hard but safely clear the way. (+3 Faith)',n);}},
+    {label:'Force the wagon through the brush',fn:()=>{
+      if(chance(.45)){if(G.supplies.parts>0){G.supplies.parts--;loseDays(1);outcome('Broken Axle','An axle snaps, but you swap in a spare part. (−1 day)',n);}else{loseDays(4);outcome('Broken Axle','An axle snaps with no spare. It takes four days to patch.',n);}}
+      else outcome('Lucky!','The wagon scrapes through with only a few scratches.',n);}}
+  ]);
+}
+
+/* ================= VICTORY ================= */
+function win(){
+  G.over=true;G.atRoute=false;
+  const al=aliveM();
+  const score=al.length*250+Math.round(G.faith)*3+G.money+Math.round(G.supplies.food/10)+G.supplies.oxen*20+Math.max(0,500-G.days*2)+(G.flags.vanguard?150:0);
+  const rank=score>1800?'Faithful Pioneer Leader':score>1300?'Steadfast Pioneer':score>800?'Weary but Triumphant Pioneer':'Survivor of the Trail';
+  screen('🏔️ The Salt Lake Valley!',`<p class="big">🏔️</p><p>Your wagon crests the last ridge and the Great Salt Lake Valley spreads below you. Tradition holds that Brigham Young, weak with mountain fever, looked over the valley and said, "This is the right place."</p><p>${G.name}, your journey has taken you from Kirtland through Missouri's troubles, Nauvoo's rise and fall, and a thousand miles of prairie and mountains. You made it.</p>
+  <p><b>Survivors:</b> ${al.map(m=>m.name).join(', ')}${al.length<4?'. You remember those who did not complete the journey.':'.'}</p>
+  <p>⛺ Days on the trail: ${G.days}<br>🧭 Miles traveled: ${G.totalMiles}<br>🙏 Faith: ${Math.round(G.faith)}<br>💰 Money: $${G.money}</p>
+  <p><b>Final score: ${score}</b>, ${rank}</p>
+  <p><small>Between 1847 and 1869, roughly 70,000 Latter-day Saint pioneers made this trek.</small></p>`,[{label:'Play Again',cls:'primary',fn:titleScreen}]);
+}
+
+titleScreen();
+</script>
+</body>
+</html>
